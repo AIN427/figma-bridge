@@ -1,0 +1,15 @@
+{
+  "name": "figma-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Локальный HTTP-мост к Figma REST API: ИИ-агент читает макеты по уровням детализации вместо выгрузки JSON руками",
+  "engines": {
+    "node": ">=21.7"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  }
+}
