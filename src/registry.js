@@ -2,7 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { BadRequest } from "./errors.js";
-import { keyFromUrl, looksLikeKey, projectFiles, shallow, teamProjects } from "./figma-api.js";
+import { keyFromUrl, looksLikeKey, meta, projectFiles, teamProjects } from "./figma-api.js";
 
 const ROOT = path.join(import.meta.dirname, "..");
 const REGISTRY = path.join(ROOT, "files.json");
@@ -31,14 +31,14 @@ export async function addFile(input, { alias, project, team } = {}) {
   const key = keyFromUrl(input) ?? input;
   if (!looksLikeKey(key)) throw new BadRequest(`not a file key or URL: ${input}`);
 
-  const head = await shallow(key);
+  const head = await meta(key);
   const reg = await readRegistry();
   reg.files[key] = {
     name: head.name,
     alias: alias ?? reg.files[key]?.alias,
     project: project ?? reg.files[key]?.project,
     team: team ?? reg.files[key]?.team,
-    lastModified: head.lastModified,
+    lastModified: head.last_touched_at,
   };
   await writeRegistry(reg);
   return { key, ...reg.files[key] };

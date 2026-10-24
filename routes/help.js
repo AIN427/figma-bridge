@@ -2,7 +2,7 @@ import { presetNames } from "../src/format.js";
 
 export const HELP = `figma bridge — levels of detail, cheapest first
 
-  GET /health
+  GET /health                                 port, token, last Figma 429 — no Figma call
   GET /me                                     token check: user + plan
   GET /log[?lines=40]                         request log — who asked what
 

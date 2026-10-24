@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { CACHE_DIR } from "../src/cache.js";
 import { me } from "../src/figma-api.js";
+import { rateLimitStatus, readRateLimit, waitLeftSec } from "../src/rate-limit.js";
 import { HELP } from "./help.js";
 
 const LOG = path.join(CACHE_DIR, "access.log");
@@ -11,12 +12,20 @@ export const diagnostics = [
   {
     method: "GET",
     match: /^\/health$/,
-    handler: () => {
+    // Local only: never calls Figma, so it is safe to ask while rate-limited.
+    handler: async () => {
       const tokenSet = Boolean(process.env.FIGMA_TOKEN);
       const port = Number(process.env.PORT ?? 3846);
+      const last = await readRateLimit();
+      const text = `ok — port ${port}, token ${tokenSet ? "set" : "MISSING"}`;
       return {
-        text: `ok — port ${port}, token ${tokenSet ? "set" : "MISSING"}`,
-        data: { ok: true, port, token: tokenSet ? "set" : "missing" },
+        text: last ? `${text}\n${rateLimitStatus(last)}` : text,
+        data: {
+          ok: true,
+          port,
+          token: tokenSet ? "set" : "missing",
+          lastRateLimit: last && { ...last, waitLeftSec: waitLeftSec(last) },
+        },
       };
     },
   },

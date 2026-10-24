@@ -1,15 +1,16 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { fullFile, shallow } from "./figma-api.js";
+import { fullFile, meta } from "./figma-api.js";
 
 const ROOT = path.join(import.meta.dirname, "..");
 export const CACHE_DIR = path.join(ROOT, ".cache");
 
 // Parsed documents kept in memory so a 167MB file is not re-parsed per request.
-// Two entries is plenty — work concentrates on one file at a time — and each
-// one costs real heap, so this number is a memory decision, not a guess.
-const MEMO_MAX = 2;
+// Each entry costs real heap — a large document can hold several hundred MB
+// parsed — so this is a memory decision, not a guess. Raise it when several
+// agents work on different files at once; lower it if the process runs fat.
+const MEMO_MAX = Number(process.env.FIGMA_MEMO_MAX ?? 2);
 const memo = new Map();
 
 // How long a memoized file is trusted before re-checking its version upstream.
@@ -32,13 +33,16 @@ function remember(key, data) {
 }
 
 /** Version check that never throws — a rate limit must not break a read. */
-async function tryShallow(key) {
+async function tryMeta(key) {
   try {
-    return await shallow(key);
-  } catch {
-    return null;
+    return await meta(key);
+  } catch (err) {
+    return { error: err.message };
   }
 }
+
+/** Where the answer came from; an unverified version says why, not just that. */
+const source = (where, head) => (head.error ? `${where}, version unverified — ${head.error}` : where);
 
 async function load(key, refresh) {
   await mkdir(CACHE_DIR, { recursive: true });
@@ -47,18 +51,18 @@ async function load(key, refresh) {
   const hot = memo.get(key);
   if (!refresh && hot) {
     if (Date.now() - hot.checkedAt < FRESH_MS) return { ...hot.data, cached: "memory" };
-    const head = await tryShallow(key);
-    if (!head || head.version === hot.data.version) {
+    const head = await tryMeta(key);
+    if (head.error || head.version === hot.data.version) {
       hot.checkedAt = Date.now();
-      return { ...hot.data, cached: head ? "memory" : "memory, version unverified" };
+      return { ...hot.data, cached: source("memory", head) };
     }
   }
 
   if (!refresh && existsSync(file)) {
     const cached = JSON.parse(await readFile(file, "utf8"));
-    const head = await tryShallow(key);
-    if (!head || head.version === cached.version)
-      return { ...remember(key, cached), cached: head ? "disk" : "disk, version unverified" };
+    const head = await tryMeta(key);
+    if (head.error || head.version === cached.version)
+      return { ...remember(key, cached), cached: source("disk", head) };
   }
 
   try {

@@ -97,7 +97,11 @@ const server = createServer(async (req, res) => {
     if (wantsJson)
       return send(
         status,
-        JSON.stringify({ error: err.message, upstream: Boolean(err.upstream) }, null, 2),
+        JSON.stringify(
+          { error: err.message, upstream: Boolean(err.upstream), rateLimit: err.rateLimit },
+          null,
+          2,
+        ),
         "application/json",
       );
     send(status, `ERROR ${err.message}`);

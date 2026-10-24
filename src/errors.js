@@ -1,3 +1,5 @@
+import { describeRateLimit } from "./rate-limit.js";
+
 /**
  * Two kinds of failure, deliberately kept apart: the ones we cause by asking
  * badly, and the ones Figma reports back. Labelling our own validation as
@@ -12,11 +14,17 @@ export class BadRequest extends Error {
   }
 }
 
-/** Figma answered with an error. The status and text are theirs, not ours. */
+/**
+ * Figma answered with an error. The status and text are theirs, not ours.
+ * On a 429 `rateLimit` carries what Figma said about the limit, if anything.
+ */
 export class FigmaError extends Error {
-  constructor(status, body) {
-    super(`Figma API ${status}: ${body}`);
+  constructor(status, body, rateLimit) {
+    const said = rateLimit ? describeRateLimit(rateLimit) : "";
+    super(`Figma API ${status}: ${body}${said ? ` · ${said}` : ""}`);
     this.status = status;
     this.upstream = true;
+    this.body = body;
+    if (rateLimit) this.rateLimit = rateLimit;
   }
 }

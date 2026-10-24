@@ -1,4 +1,5 @@
 import { BadRequest, FigmaError } from "./errors.js";
+import { rateLimitFrom, saveRateLimit } from "./rate-limit.js";
 
 const API = "https://api.figma.com/v1";
 
@@ -24,8 +25,21 @@ export async function get(pathname) {
       throw new FigmaError(504, `no answer in ${TIMEOUT_MS / 1000}s`);
     throw new FigmaError(502, err.message);
   }
-  if (!res.ok) throw new FigmaError(res.status, (await res.text()).slice(0, 400));
+  if (!res.ok) {
+    const err = await failure(res);
+    if (err.rateLimit) {
+      const at = new Date().toISOString();
+      await saveRateLimit({ at, endpoint: pathname, body: err.body, ...err.rateLimit });
+    }
+    throw err;
+  }
   return res.json();
+}
+
+/** A failed response as a FigmaError; on a 429 it keeps what Figma said about the limit. */
+export async function failure(res) {
+  const body = (await res.text()).slice(0, 400);
+  return new FigmaError(res.status, body, res.status === 429 ? rateLimitFrom(res.headers) : undefined);
 }
 
 /** Downloads a rendered asset from the short-lived URL Figma hands back. */
@@ -37,8 +51,12 @@ export async function download(url) {
 
 export const me = () => get("/me");
 
-/** Cheap call: the document with pages only. Used for the version check. */
-export const shallow = (key) => get(`/files/${key}?depth=1`);
+/**
+ * Name and version without the document — the version check. Any read under
+ * /files/:key, even ?depth=1, is Tier 1 at Figma: a monthly quota on View/Collab
+ * seats. /meta is Tier 3 and needs the file_metadata:read scope.
+ */
+export const meta = async (key) => (await get(`/files/${key}/meta`)).file;
 
 export const fullFile = (key) => get(`/files/${key}`);
 
